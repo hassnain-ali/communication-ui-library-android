@@ -15,6 +15,7 @@ import android.util.LayoutDirection
 import android.util.Rational
 import android.view.MenuItem
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
 import android.view.WindowManager
 import androidx.activity.result.ActivityResultLauncher
@@ -22,6 +23,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.fragment.app.FragmentTransaction
 import androidx.lifecycle.lifecycleScope
 import com.azure.android.communication.ui.calling.CallCompositeException
@@ -36,12 +41,15 @@ import com.azure.android.communication.ui.calling.presentation.fragment.calling.
 import com.azure.android.communication.ui.calling.presentation.fragment.calling.support.SupportViewModel
 import com.azure.android.communication.ui.calling.presentation.fragment.setup.SetupFragment
 import com.azure.android.communication.ui.calling.redux.action.CallingAction
+import com.azure.android.communication.ui.calling.redux.action.DeviceConfigurationAction
 import com.azure.android.communication.ui.calling.redux.action.NavigationAction
 import com.azure.android.communication.ui.calling.redux.action.PipAction
 import com.azure.android.communication.ui.calling.redux.state.NavigationStatus
 import com.azure.android.communication.ui.calling.redux.state.VisibilityStatus
 import com.azure.android.communication.ui.calling.utilities.collect
 import com.azure.android.communication.ui.calling.utilities.isAndroidTV
+import com.azure.android.communication.ui.calling.utilities.isKeyboardOpen
+import com.azure.android.communication.ui.calling.utilities.isTablet
 import com.azure.android.communication.ui.calling.utilities.launchAll
 import com.microsoft.fluentui.util.activity
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -84,13 +92,17 @@ internal open class CallCompositeActivity : AppCompatActivity() {
     private val instanceId get() = intent.getIntExtra(KEY_INSTANCE_ID, -1)
     private val callHistoryService get() = container.callHistoryService
     private val logger get() = container.logger
-    private val compositeManager get() = container.compositeExitManager
-    private val compositeDataModel get() = container.captionsDataManager
+    private val compositeExitManager get() = container.compositeExitManager
+    private val captionsDataManager get() = container.captionsRttDataManager
     private val updatableOptionsManager get() = container.updatableOptionsManager
     private lateinit var visibilityStatusFlow: MutableStateFlow<VisibilityStatus>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Before super, we'll set up the DI injector and check the PiP state
+        if (Build.VERSION.SDK_INT >= 35) {
+            // Turn OFF edge-to-edge behavior
+            WindowCompat.setDecorFitsSystemWindows(window, true)
+        }
         try {
             diContainerHolder.instanceId = instanceId
             diContainerHolder.container.callCompositeActivityWeakReference = WeakReference(this)
@@ -100,16 +112,26 @@ internal open class CallCompositeActivity : AppCompatActivity() {
             return
         }
 
+        store.dispatch(DeviceConfigurationAction.ToggleTabletMode(isTablet(this)))
+        store.dispatch(
+            DeviceConfigurationAction.TogglePortraitMode(
+                resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
+            )
+        )
+
         val listeningPair = Pair(lifecycleScope, store)
         visibilityStatusFlow = MutableStateFlow(store.getCurrentState().visibilityState.status)
 
-        // Call super
         super.onCreate(savedInstanceState)
         syncPipMode()
         // Inflate everything else
         volumeControlStream = AudioManager.STREAM_VOICE_CALL
 
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        window.addFlags(
+            WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+        )
         configureLocalization()
         setStatusBarColor()
         setNavigationBarColor()
@@ -119,7 +141,18 @@ internal open class CallCompositeActivity : AppCompatActivity() {
         }
         updatableOptionsManager.start()
         setContentView(R.layout.azure_communication_ui_calling_activity_call_composite)
+        if (Build.VERSION.SDK_INT >= 35) {
+            val rootView = findViewById<ViewGroup>(R.id.azure_communication_ui_fragment_container_view)
 
+            ViewCompat.setOnApplyWindowInsetsListener(rootView) { view, insets ->
+                val statusBarHeight = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
+                val navBarHeight = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+
+                view.updatePadding(top = statusBarHeight, bottom = navBarHeight)
+
+                insets
+            }
+        }
         permissionManager.start(
             this,
             getAudioPermissionLauncher(),
@@ -158,7 +191,7 @@ internal open class CallCompositeActivity : AppCompatActivity() {
         notificationService.start(lifecycleScope, instanceId)
         callHistoryService.start(lifecycleScope)
         callStateHandler.start(lifecycleScope)
-        compositeDataModel.start(lifecycleScope)
+        captionsDataManager.start(lifecycleScope)
 
         listeningPair.collect {
             supportViewModel.update(it.navigationState)
@@ -180,11 +213,18 @@ internal open class CallCompositeActivity : AppCompatActivity() {
         // when PiP is closed, Activity is not re-created, so onCreate is not called,
         // need to call initPipMode from onResume as well
         initPipMode()
+
+        // Track if keyboard is open or closed
+        val rootView = findViewById<View>(R.id.azure_communication_ui_root_view)
+        rootView.viewTreeObserver.addOnGlobalLayoutListener {
+            if (store.getCurrentState().deviceConfigurationState.isSoftwareKeyboardVisible != isKeyboardOpen()) {
+                store.dispatch(DeviceConfigurationAction.ToggleKeyboardVisibility(isKeyboardOpen()))
+            }
+        }
     }
 
     private fun initPipMode() {
         if (configuration.enableSystemPiPWhenMultitasking &&
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.N &&
             activity?.packageManager?.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE) == true
         ) {
             store.dispatch(
@@ -214,7 +254,7 @@ internal open class CallCompositeActivity : AppCompatActivity() {
 
             if (isFinishing && store.getCurrentState().navigationState.navigationState == NavigationStatus.EXIT) {
                 store.dispatch(CallingAction.CallEndRequested())
-                compositeManager.onCompositeDestroy()
+                compositeExitManager.onCompositeDestroy()
                 CallCompositeInstanceManager.removeCallComposite(instanceId)
             }
         }
@@ -339,6 +379,8 @@ internal open class CallCompositeActivity : AppCompatActivity() {
             else -> {
                 configuration.localizationConfig!!.layoutDirection?.let {
                     window?.decorView?.layoutDirection = it
+                    window?.decorView?.textDirection =
+                        if (it == LayoutDirection.RTL) View.TEXT_DIRECTION_RTL else View.TEXT_DIRECTION_LTR
                 }
                 configuration.localizationConfig!!.locale
             }
@@ -348,7 +390,7 @@ internal open class CallCompositeActivity : AppCompatActivity() {
         resources.updateConfiguration(config, resources.displayMetrics)
 
         supportView.layoutDirection =
-            activity?.window?.decorView?.layoutDirection ?: LayoutDirection.LOCALE
+            activity?.window?.decorView?.layoutDirection ?: View.LAYOUT_DIRECTION_LOCALE
     }
 
     private fun getCameraPermissionLauncher(): ActivityResultLauncher<String> {

@@ -5,10 +5,15 @@ package com.azure.android.communication.ui.calling.presentation.fragment.calling
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.res.Configuration
+import android.os.Build
 import android.view.View
 import android.widget.RelativeLayout
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
+import androidx.core.view.updatePadding
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -18,7 +23,6 @@ import com.azure.android.communication.ui.calling.utilities.BottomCellAdapter
 import com.azure.android.communication.ui.calling.utilities.BottomCellItem
 import com.azure.android.communication.ui.calling.utilities.BottomCellItemType
 import com.microsoft.fluentui.drawer.DrawerDialog
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlin.math.max
 
@@ -74,6 +78,21 @@ internal class LeaveConfirmView(
     private fun initializeLeaveConfirmMenuDrawer() {
         leaveConfirmMenuDrawer = DrawerDialog(context, DrawerDialog.BehaviorType.BOTTOM)
         leaveConfirmMenuDrawer.setContentView(this)
+        if (Build.VERSION.SDK_INT >= 35) {
+            ViewCompat.setOnApplyWindowInsetsListener(this) { view, windowInsets ->
+                val orientation = resources.configuration.orientation
+                val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemGestures())
+
+                // Apply padding only in portrait orientation
+                if (orientation == Configuration.ORIENTATION_PORTRAIT) {
+                    view.updatePadding(0, 0, 0, insets.bottom + 76)
+                } else {
+                    view.updatePadding(0, 0, 0, 0)
+                }
+                WindowInsetsCompat.CONSUMED
+            }
+        }
+
         leaveConfirmMenuDrawer.setOnDismissListener {
             viewModel.cancel()
         }
@@ -88,33 +107,21 @@ internal class LeaveConfirmView(
             val bottomCellItems = mutableListOf(
                 // Leave title
                 BottomCellItem(
-                    null,
-                    context.getString(R.string.azure_communication_ui_calling_view_leave_call),
-                    context.getString(R.string.azure_communication_ui_calling_view_leave_confirm_menu),
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    false,
-                    BottomCellItemType.BottomMenuTitle,
-                    null
+                    title = context.getString(R.string.azure_communication_ui_calling_view_leave_call),
+                    contentDescription = context.getString(R.string.azure_communication_ui_calling_view_leave_confirm_menu),
+                    isOnHold = false,
+                    itemType = BottomCellItemType.BottomMenuTitle,
                 ),
 
                 // Leave
                 BottomCellItem(
-                    ContextCompat.getDrawable(
+                    icon = ContextCompat.getDrawable(
                         context,
                         R.drawable.azure_communication_ui_calling_leave_confirm_telephone_24
                     ),
-                    context.getString(R.string.azure_communication_ui_calling_view_leave_call_button_text),
-                    context.getString(R.string.azure_communication_ui_calling_leave_confirm_drawer_leave_button),
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    false,
+                    title = context.getString(R.string.azure_communication_ui_calling_view_leave_call_button_text),
+                    contentDescription = context.getString(R.string.azure_communication_ui_calling_leave_confirm_drawer_leave_button),
+                    isOnHold = false,
                     onClickAction = {
                         viewModel.confirm()
                     }
@@ -122,18 +129,13 @@ internal class LeaveConfirmView(
 
                 // Cancel
                 BottomCellItem(
-                    ContextCompat.getDrawable(
+                    icon = ContextCompat.getDrawable(
                         context,
                         R.drawable.azure_communication_ui_calling_leave_confirm_dismiss_24
                     ),
-                    context.getString(R.string.azure_communication_ui_calling_view_leave_call_cancel),
-                    context.getString(R.string.azure_communication_ui_calling_leave_confirm_drawer_cancel_button),
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    false,
+                    title = context.getString(R.string.azure_communication_ui_calling_view_leave_call_cancel),
+                    contentDescription = context.getString(R.string.azure_communication_ui_calling_leave_confirm_drawer_cancel_button),
+                    isOnHold = false,
                     onClickAction = {
                         cancelLeaveConfirm()
                     },

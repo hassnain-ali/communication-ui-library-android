@@ -3,6 +3,7 @@
 
 package com.azure.android.communication.ui.callingcompositedemoapp
 
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -24,9 +25,12 @@ import android.view.View
 import android.widget.LinearLayout
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.lifecycle.LifecycleCoroutineScope
 import androidx.lifecycle.lifecycleScope
-import com.azure.android.communication.common.CommunicationTokenCredential
 import com.azure.android.communication.ui.callingcompositedemoapp.databinding.ActivityCallLauncherBinding
 import com.azure.android.communication.ui.callingcompositedemoapp.features.AdditionalFeatures
 import com.azure.android.communication.ui.callingcompositedemoapp.features.FeatureFlags
@@ -65,11 +69,18 @@ class CallLauncherActivity : AppCompatActivity() {
         getSharedPreferences(SETTINGS_SHARED_PREFS, Context.MODE_PRIVATE)
     }
 
+    // suppress UnspecifiedRegisterReceiverFlag to be able to use registerReceiver for under API 33
+    @SuppressLint("UnspecifiedRegisterReceiverFlag")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (shouldFinish()) {
             finish()
             return
+        }
+
+        if (Build.VERSION.SDK_INT >= 35) {
+            // Turn OFF edge-to-edge behavior
+            WindowCompat.setDecorFitsSystemWindows(window, true)
         }
         isActivityRunning = true
         createNotificationChannels()
@@ -282,6 +293,15 @@ class CallLauncherActivity : AppCompatActivity() {
                 IntentFilter(CALL_LAUNCHER_BROADCAST_ACTION)
             )
         }
+        if (Build.VERSION.SDK_INT >= 35) {
+            ViewCompat.setOnApplyWindowInsetsListener(binding.launchActivity) { view, windowInsets ->
+
+                view.updatePadding(0, 150, 0, 0)
+
+                WindowInsetsCompat.CONSUMED
+            }
+        }
+        autoRegisterPushIfNeeded()
     }
 
     override fun onNewIntent(intent: Intent?) {
@@ -354,13 +374,6 @@ class CallLauncherActivity : AppCompatActivity() {
                 showAlert(message)
                 return
             }
-        }
-
-        try {
-            CommunicationTokenCredential(acsToken)
-        } catch (e: Exception) {
-            showAlert("Invalid token")
-            return
         }
 
         callCompositeManager.launch(
@@ -539,6 +552,7 @@ class CallLauncherActivity : AppCompatActivity() {
             acsToken!!,
             userName!!
         )
+        sharedPreference.edit().putBoolean("PUSH_REGISTERED", true).apply()
     }
 
     private fun unregisterPushNotification() {
@@ -549,6 +563,7 @@ class CallLauncherActivity : AppCompatActivity() {
             acsToken!!,
             userName!!
         )
+        sharedPreference.edit().putBoolean("PUSH_REGISTERED", false).apply()
     }
 
     private fun ActivityCallLauncherBinding.cacheTokenAndDisplayName() {
@@ -560,6 +575,13 @@ class CallLauncherActivity : AppCompatActivity() {
         initCallCompositeManager()
         newIntent.action?.let {
             onIntentAction(it, newIntent.extras)
+        }
+    }
+
+    private fun autoRegisterPushIfNeeded() {
+        val wasRegistered = sharedPreference.getBoolean("PUSH_REGISTERED", false)
+        if (wasRegistered) {
+            registerPushNotification()
         }
     }
 }

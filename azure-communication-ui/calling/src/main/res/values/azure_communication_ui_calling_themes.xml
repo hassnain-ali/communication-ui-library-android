@@ -19,6 +19,9 @@
         <item name="azure_communication_ui_calling_primary_color">
             @color/fluentui_communication_blue
         </item>
+        <item name="android:navigationBarColor">
+            @android:color/transparent
+        </item>
         <item name="azure_communication_ui_calling_foreground_on_primary_color">
             @color/azure_communication_ui_calling_color_on_primary
         </item>
@@ -28,6 +31,14 @@
         </item>
         <item name="azure_communication_ui_calling_primary_color_tint30">
             @color/fluentui_communication_tint_30
+        </item>
+
+        <item name="azure_communication_ui_calling_primary_color_shade20">
+            @color/fluentui_communication_shade_20
+        </item>
+
+        <item name="azure_communication_ui_calling_primary_color_shade30">
+            @color/fluentui_communication_shade_30
         </item>
 
         <item name="android:colorControlHighlight">

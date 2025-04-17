@@ -9,11 +9,11 @@ apply from: file('jacoco.gradle')
 
 android {
     resourcePrefix 'azure_communication_ui_calling_'
-    compileSdk 34
+    compileSdk 35
 
     defaultConfig {
         minSdkVersion 26
-        targetSdkVersion 34
+        targetSdkVersion 35
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles "consumer-rules.pro"
         buildConfigField "String", "UI_SDK_VERSION", "\"" + call_library_version_name + "\""
@@ -76,6 +76,7 @@ android {
             exclude({ it.file.absolutePath.contains("/generated/") })
         }
     }
+    namespace 'com.azure.android.communication.ui.calling.implementation'
 
     if (!shouldByPassMavenPublish()) {
         publishing {
@@ -95,17 +96,13 @@ dependencies {
     implementation "androidx.fragment:fragment-ktx:$androidx_fragment_ktx_version"
     implementation "androidx.constraintlayout:constraintlayout:$androidx_constraint_layout_version"
     implementation "androidx.navigation:navigation-fragment-ktx:$androidx_navigation_fragment_ktx_version"
-    /* <RTT_POC>
-    // Used for deserializing the JSON response from the RTT Data Channel
-    // Will be done inside Calling SDK later
-    implementation("com.google.code.gson:gson:2.9.0")
-    </RTT_POC> */
     api ("com.azure.android:azure-communication-calling:$azure_calling_sdk_version")
     implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:$androidx_lifecycle_viewmodel_ktx_version"
     implementation "com.microsoft.fluentui:fluentui_others:$microsoft_fluent_ui_version"
     implementation "com.microsoft.fluentui:fluentui_drawer:$microsoft_fluent_ui_version"
     implementation "com.microsoft.fluentui:fluentui_persona:$microsoft_fluent_ui_version"
     implementation "com.microsoft.fluentui:fluentui_transients:$microsoft_fluent_ui_version"
+    implementation "androidx.activity:activity-ktx:$androidx_activity_ktx_version"
 
     api 'com.jakewharton.threetenabp:threetenabp:1.4.4'
 
