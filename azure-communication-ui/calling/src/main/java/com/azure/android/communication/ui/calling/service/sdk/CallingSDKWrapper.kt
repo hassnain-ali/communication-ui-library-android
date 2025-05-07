@@ -51,7 +51,7 @@ import java.io.File
 import java.util.Collections
 /*  <CALL_START_TIME>
 import java.util.Date
-/* </CALL_START_TIME> */
+</CALL_START_TIME> */
 import java.util.concurrent.CompletableFuture
 import com.azure.android.communication.calling.LocalVideoStream as NativeLocalVideoStream
 
